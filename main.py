@@ -41,8 +41,8 @@ def main():
             # Gera o áudio com os novos parâmetros para validação auditiva
             # (Usando delays fixos do exemplo anterior - idealmente delays seriam variáveis por efeito)
             fixed_delays_combs = [0.0297, 0.0371, 0.0411, 0.0437]
-            fixed_delays_ap = [0.005, 0.0017]
-            fixed_gains_ap = [0.7, 0.7]
+            fixed_delays_ap = [1.051, 0.337, 0.113]
+            fixed_gains_ap = [0.7, 0.7, 0.7]
             
             my_processed = apply_reverb(dry_audio, fs, fixed_delays_combs, best_gains, fixed_delays_ap, fixed_gains_ap)
             

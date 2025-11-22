@@ -2,7 +2,6 @@ import os
 from audio_io import load_wav
 
 # Definição das constantes de nomes de efeitos baseados na VEDO A8
-
 EFFECTS_MAP = {
     "REV-HALL1":     "01.wav",
     "REV-HALL2":     "02.wav",
@@ -40,41 +39,7 @@ class AudioManager:
         self.audio_cache = {} 
         
     def get_dry_audio(self):
-        """Retorna (fs, data) do áudio original usando a chave 'ORIGINAL'."""
-        if self.dry_key not in self.audio_cache:
-            print(f"Carregando áudio original: {self.dry_filename}...")
-            fs, data = load_wav(self.dry_path) 
-            self.audio_cache[self.dry_key] = (fs, data)
-        return self.audio_cache[self.dry_key]
-
-    def verify_files(self):
-        """Verifica se todos os arquivos mapeados existem na pasta."""
-        missing = []
-        
-        if not os.path.exists(self.dry_path):
-            missing.append(self.dry_filename)
-            
-        for effect_name, filename in EFFECTS_MAP.items():
-            full_path = os.path.join(self.base_folder, filename)
-            if not os.path.exists(full_path):
-                missing.append(f"{effect_name}: {filename}")
-        
-        if missing:
-            print("⚠️  AVISO: Os seguintes arquivos não foram encontrados:")
-            for m in missing:
-                print(f"   - {m}")
-            print("Verifique se os nomes na pasta audio_files correspondem ao EFFECTS_MAP.")
-            return False
-        
-        print("✅ Todos os arquivos de áudio foram localizados com sucesso.")
-        return True
-
-    def get_dry_audio(self):
-        """Retorna (fs, data) do áudio original."""
-        if "DRY" not in self.audio_cache:
-            print(f"Carregando áudio original: {self.dry_filename}...")
-            self.audio_cache["DRY"] = load_wav(self.dry_path)
-        return self.audio_cache["DRY"]
+        return self.get_target_audio("ORIGINAL")
 
     def get_target_audio(self, effect_key):
         """Retorna (fs, data) do áudio processado pela mesa para um efeito específico."""

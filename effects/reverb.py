@@ -1,83 +1,43 @@
 import numpy as np
+from effects.assets import IIRCombFilter, AllPassFilter
 
-class CombFilter:
-    # Filtro Pente IIR: y[n] = x[n] + g * y[n-M]
-    def __init__(self, delay_samples, gain):
-        self.delay_samples = delay_samples
-        self.gain = gain
-        self.buffer = np.zeros(delay_samples) 
-        self.ptr = 0
+def apply_reverb(x, fs, delays_combs_ms, gains_combs, delays_ap_ms, gains_ap, wet_gain=0.4):
     
-    def process(self, x):
-        # 1. Leitura da amostra atrasada (y[n-M])
-        delayed_val = self.buffer[self.ptr]
-        
-        # 2. Saída (saída de feedback, como usado na topologia Schroeder)
-        y = delayed_val
-        
-        # 3. Atualiza buffer (Realimentação IIR)
-        # O novo valor no buffer é a soma da entrada (x[n]) mais a versão atrasada (g * y[n-M])
-        self.buffer[self.ptr] = x + (self.gain * delayed_val)
-        
-        # 4. Atualiza ponteiro circular
-        self.ptr = (self.ptr + 1) % self.delay_samples
-            
-        return y
-
-class AllPassFilter:
-    # Filtro Passa-Tudo: y[n] = -g * x[n] + x[n-M] + g * y[n-M]
-    def __init__(self, delay_samples, gain):
-        self.delay_samples = delay_samples
-        self.gain = gain
-        self.buffer = np.zeros(delay_samples)
-        self.ptr = 0
-        
-    def process(self, x):
-        # 1. Leitura do valor atrasado (x[n-M] / y[n-M])
-        delayed_val = self.buffer[self.ptr]
-        
-        # 2. Entrada para o buffer (x[n] + g * y[n-M])
-        input_to_buffer = x + (self.gain * delayed_val)
-        
-        # 3. Saída (All-Pass)
-        y = (-self.gain * x) + delayed_val
-        
-        # 4. Atualiza buffer
-        self.buffer[self.ptr] = input_to_buffer
-        
-        # 5. Atualiza ponteiro circular
-        self.ptr = (self.ptr + 1) % self.delay_samples
-            
-        return y
-
-def apply_reverb(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain=0.1):
-    """
-    Aplica Reverb baseado na estrutura de Schroeder (Comb e All-Pass).
-    Parâmetros são arrays para suportar topologias complexas, 
-    mas podem ser usados com um único valor (ex: [0.03]).
-    """
+    print(f"--- Reverb: Processando {len(x)} amostras a {fs}Hz ---")
     
-    # 1. Instanciar Filtros
-    comb = CombFilter(int(delays_combs[0]*fs), gains_combs[0])
-    ap = AllPassFilter(int(delays_ap[0]*fs), gains_ap[0])
+    # 1. Inicializa Filtros (Recebendo MS direto)
+    combs = []
+    for i in range(len(delays_combs_ms)):
+        combs.append(IIRCombFilter(delays_combs_ms[i], gains_combs[i], fs))
+        
+    aps = []
+    for i in range(len(delays_ap_ms)):
+        aps.append(AllPassFilter(delays_ap_ms[i], gains_ap[i], fs))
     
     N = len(x)
     y = np.zeros(N, dtype=np.float32)
-    
-    dry_gain = 1.0 - wet_gain
-    
-    # 2. Processamento Amostra a Amostra
+        
+    # 2. Loop de Áudio
     for n in range(N):
         input_sample = x[n]
+        # Soma dos Combs (Paralelo)
+        comb_sum = 0.0
+        for comb in combs:
+            comb_sum += comb.process(input_sample)
+            
+        # Série de All-Pass
+        ap_out = comb_sum
+        for ap in aps:
+            ap_out = ap.process(ap_out)
+            
+        reverb_signal = ap_out
         
-        # 1. Processa Comb
-        comb_out = comb.process(input_sample)
+        y[n] = (x[n] * (1 - wet_gain)) + (reverb_signal * wet_gain)/ len(combs)  # Normaliza pela quantidade de combs
             
-        # 2. Processa AllPass (para difusão)
-        ap_out = ap.process(comb_out)
-            
-        # 3. Mix final: Dry + Wet (Wet atenuado)
-        # O ganho wet é crucial para evitar clipping.
-        y[n] = (dry_gain * input_sample) + (wet_gain * ap_out)
-            
+    # 3. Normalização de Segurança (Evita o ruído digital se passar de 1.0)
+    max_amp = np.max(np.abs(y))
+    if max_amp > 1.0:
+        print(f" > Normalizando volume final (Pico: {max_amp:.2f})")
+        y = y / max_amp
+        
     return y

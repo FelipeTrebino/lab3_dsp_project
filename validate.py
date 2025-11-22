@@ -1,60 +1,48 @@
 import os
-import sys
-from file_manager import AudioManager, EFFECTS_MAP 
+from file_manager import AudioManager
 from effects.reverb import apply_reverb
+from effects.flanger import apply_flanger
+from effects.tremolo import apply_tremolo
+
 from audio_io import save_wav
 
 def main():
-    # 1. Configuração de pastas e gerenciador
-    output_folder = "output"
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-        print(f"Pasta '{output_folder}' criada.")
-
     manager = AudioManager(base_folder="audio_files", dry_key="ORIGINAL") 
-    
-    if not os.path.exists(manager.dry_path):
-        print(f"Erro: O arquivo {manager.dry_filename} (Chave ORIGINAL) não foi encontrado em {manager.base_folder}")
-        return
-
-    # 2. Carregar o áudio de entrada
     fs, audio_original = manager.get_dry_audio()
 
-    # 3. Definição dos Parâmetros Fixos (Schroeder Reverb - "Hall" Fixo)
-    fixed_delays_combs = [0.4799, 0.4999, 0.5399, 0.5801] 
+    # Comb Filters
+    combs_ms = [29.7, 37.1, 41.1, 43.7] # Delays (Tamanho da sala), em ms
+    combs_gains = [0.77, 0.75, 0.73, 0.71] # Ganhos 
     
-    # Ganhos Conservadores (Decaimento Rápido)
-    # Valores < 0.8 garantem estabilidade e decaimento rápido.
-    fixed_gains_combs = [0.742, 0.733, 0.715, 0.697] 
-    
-    # Ganhos dos Filtros All-Pass (Valor Seguro)
-    fixed_delays_ap = [0.1051, 0.0337]
-    fixed_gains_ap = [0.7, 0.7]      
-    
-    wet_gain_conservative = 0.1 # 20% de sinal úmido
+    # All-Pass (Difusão)
+    aps_ms = [5.0, 1.7] # Delays em ms
+    aps_gains = [0.7, 0.7] # Ganhos
 
-    print("Aplicando efeito Reverb (Valores Fixos)...")
-    print(f" > Fs: {fs} Hz")
-
-    # 4. Aplicação do Efeito
-    processed_audio = apply_reverb(
+    print("Aplicando Reverb...")
+    
+    processed_audio_reverb = apply_reverb(
         audio_original, 
         fs, 
-        fixed_delays_combs, 
-        fixed_gains_combs, 
-        fixed_delays_ap, 
-        fixed_gains_ap,
-        wet_gain=wet_gain_conservative
+        combs_ms,    
+        combs_gains, 
+        aps_ms,
+        aps_gains,
+        wet_gain=1
     )
-
-    # 5. Salvar o resultado
-    output_filename = "reverb_fixed_output.wav"
-    full_output_path = os.path.join(output_folder, output_filename)
     
-    save_wav(full_output_path, fs, processed_audio)
+    processed_audio_flanger = apply_flanger(
+        audio_original, 
+        fs
+    )
     
-    print(f"✅ Processamento concluído!")
-    print(f"Áudio original '{manager.dry_filename}' processado e salvo em: {full_output_path}")
+    processed_audio_tremolo = apply_tremolo(
+        audio_original,
+        fs
+    )
+      
+    save_wav("output/reverb_test.wav", fs, processed_audio_reverb)
+    save_wav("output/flanger_test.wav", fs, processed_audio_flanger)
+    save_wav("output/tremolo_test.wav", fs, processed_audio_tremolo)
 
 if __name__ == "__main__":
     main()

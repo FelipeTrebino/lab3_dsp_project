@@ -1,61 +1,88 @@
 import numpy as np
+from effects.assets import Oscillator, FIRCombFilter
 
-def apply_flanger(x, fs, rate, depth_ms, feedback, delay_base_ms=1.0):
+def apply_flanger(x, fs, delay_min_ms=1.0, delay_max_ms=5.0, rate_hz=0.5, depth_gain=0.7):
     """
-    Aplica Flanger com interpolação linear.
-    x: input
-    rate: frequência do LFO (Hz)
-    depth_ms: variação do delay em ms
-    feedback: ganho de realimentação (0.0 a <1.0)
-    delay_base_ms: delay fixo mínimo
+    Aplica o efeito Flanger combinando um FIR Comb Filter com um Oscilador (LFO).
+    
+    Args:
+        x: Sinal de áudio de entrada.
+        fs: Taxa de amostragem do áudio.
+        delay_min_ms: Atraso mínimo em milissegundos.
+        delay_max_ms: Atraso máximo em milissegundos.
+        rate_hz: Velocidade da oscilação do LFO em Hz.
+        depth_gain: Ganho do efeito (0.0 a 1.0), controla a intensidade do flanger.
     """
+    print(f"--- Flanger: Rate={rate_hz}Hz, Delay={delay_min_ms}-{delay_max_ms}ms ---")
+    
     N = len(x)
     y = np.zeros(N, dtype=np.float32)
     
-    # Converter ms para amostras
-    depth_samples = int((depth_ms / 1000.0) * fs)
-    base_samples = int((delay_base_ms / 1000.0) * fs)
+    # 1. PREPARAR O LFO (OSCILADOR)
+    # O Flanger precisa modular o ATRASO.
+    # Precisamos converter Min/Max ms para Média e Amplitude em AMOSTRAS.
+    # L(n) = L0 + A * sin(wn)
     
-    # Buffer circular simples (ou acesso direto ao array com verificação de borda)
-    # LFO phase
-    phase = 0.0
-    phase_inc = 2 * np.pi * rate / fs
+    avg_delay_s = (delay_min_ms + delay_max_ms) / 2000.0 # Média (L0)
+    amp_delay_s = (delay_max_ms - delay_min_ms) / 2000.0 # Amplitude (A)
     
-    # Implementação iterativa (como será em C++)
+    L0_samples = avg_delay_s * fs
+    A_samples  = amp_delay_s * fs
+    
+    # Instância do LFO
+    lfo = Oscillator(fs=fs, 
+                     rate_hz=rate_hz, 
+                     center_val=L0_samples,
+                     range_val=A_samples) 
+    
+    # 2. PREPARAR O FILTRO
+    # FIRCombFilter utilizado apenas como gerenciador de buffer circular
+    fir_comb = FIRCombFilter(delay_ms=delay_max_ms + 2.0, gain=depth_gain, fs=fs)
+    
+    # Acesso direto aos componentes internos para manipulação manual
+    buffer = fir_comb.buffer
+    buffer_len = len(buffer)
+    write_ptr = 0 
+    
+    # 3. PROCESSAMENTO
     for n in range(N):
-        # Calcula o delay atual modulado pelo LFO
-        # LFO varia de 0 a 1 (seno deslocado) para evitar delay negativo
-        lfo_val = 0.5 * (1 + np.sin(phase)) 
-        current_delay = base_samples + (lfo_val * depth_samples)
+        input_sample = x[n]
         
-        # Índice de leitura (fracionário)
-        read_idx = n - current_delay
+        # A. Obter o atraso atual do LFO
+        current_delay_samples = lfo.next()
         
-        # Interpolação Linear
-        # y = (1-frac)*x[int] + frac*x[int+1]
-        i_part = int(np.floor(read_idx))
-        frac = read_idx - i_part
+        # B. Ler do Buffer com Interpolação Linear
+        # Ponteiro de leitura = Ponteiro de escrita - Atraso do LFO
+        read_ptr_float = write_ptr - current_delay_samples
         
-        if i_part >= 0 and i_part < N - 1:
-            delayed_sample = (1.0 - frac) * x[i_part] + frac * x[i_part + 1]
-        else:
-            delayed_sample = 0.0
+        # Circularidade
+        while read_ptr_float < 0:
+            read_ptr_float += buffer_len
             
-        # Equação a diferenças do Flanger com Feedback
-        # y[n] = x[n] + g_fb * y[n-1] (simplificado no loop) + delayed
-        # Estrutura clássica: Input + Feedback + Delayed
+        # Interpolação
         
-        # Feedforward (som direto + atrasado)
-        y[n] = x[n] + 0.7 * delayed_sample # 0.7 é o ganho wet
+        # 1. Índice inteiro anterior
+        idx_int = int(read_ptr_float)
+        # 2. Calcula a distância decimal
+        frac = read_ptr_float - idx_int
+        # 3. Próximo índice (circular)
+        idx_next = (idx_int + 1) % buffer_len
+        # 4. Lê os valores reais armazenados no buffer
+        val_current = buffer[idx_int]
+        val_next = buffer[idx_next]
+        # 5. Calcula a média ponderada
+        delayed_val = (val_current * (1.0 - frac)) + (val_next * frac)
         
-        # Se houver feedback (IIR Comb variável), adicionaríamos aqui:
-        # Mas flanger básico é FIR Comb variável na maioria das mesas simples.
-        # Se a Vedo usar feedback, a lógica muda levemente:
-        # input_with_fb = x[n] + feedback * delayed_sample
-        # y[n] = input_with_fb + delayed_sample (Depende da topologia)
+        # C. Equação FIR Comb: y[n] = x[n] + g * x[n - L(n)]
+        y[n] = input_sample + (depth_gain * delayed_val)
         
-        phase += phase_inc
-        if phase > 2 * np.pi:
-            phase -= 2 * np.pi
-            
+        # D. Escrever no Buffer
+        buffer[write_ptr] = input_sample
+        write_ptr = (write_ptr + 1) % buffer_len
+
+    # Normalização de segurança
+    peak = np.max(np.abs(y))
+    if peak > 1.0:
+        y /= peak
+        
     return y

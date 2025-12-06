@@ -2,3 +2,6 @@
 /effects/__pycache__
 /output
 *.pyc
+*.pyc
+/__pycache__
+/effects/__pycache__

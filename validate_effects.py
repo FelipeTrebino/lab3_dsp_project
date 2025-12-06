@@ -1,6 +1,6 @@
 import os
 from file_manager import AudioManager
-from effects.reverb import apply_reverb
+from effects.reverb import apply_reverb, apply_reverb_stereo
 from effects.flanger import apply_flanger
 from effects.tremolo import apply_tremolo
 from pitch_shift.shift_assets import shift_to_note
@@ -62,29 +62,6 @@ def main():
     #save_wav("output/flanger_test.wav", fs, processed_audio_flanger)
     #save_wav("output/tremolo_test.wav", fs, processed_audio_tremolo)
 
-
-def apply_reverb_stereo(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain=0.4, spread=23):
-    """
-    Gera um Reverb Estéreo processando L e R com atrasos ligeiramente diferentes.
-    spread: valor em amostras adicionado ao canal direito para descorrelacionar.
-    """
-    
-    # 1. Calcula desvio em ms para o canal direito
-    spread_ms = (spread / fs) * 1000.0
-    
-    # Canal Esquerdo (Parâmetros Originais)
-    left = apply_reverb(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain, print_info=False)
-    
-    # Canal Direito (Parâmetros com Spread)
-    # Adiciona um pouquinho de atraso extra em cada Comb para "abrir" o som
-    delays_right = [d + spread_ms for d in delays_combs]
-    
-    # Opcional: Inverter levemente um ganho ou outro ajuda na largura
-    right = apply_reverb(x, fs, delays_right, gains_combs, delays_ap, gains_ap, wet_gain, print_info=False)
-    
-    # Junta em estéreo (N, 2)
-    stereo_output = np.vstack((left, right)).T
-    return stereo_output
 
 if __name__ == "__main__":
     main()

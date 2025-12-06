@@ -47,3 +47,23 @@ def apply_reverb(x, fs, delays_combs_ms, gains_combs, delays_ap_ms, gains_ap, we
         y = y / max_amp
         
     return y
+
+def apply_reverb_stereo(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain=0.4, spread=23):
+    """
+    Gera um Reverb Estéreo processando L e R com atrasos ligeiramente diferentes.
+    """
+    # 1. Calcula desvio em ms para o canal direito
+    spread_ms = (spread / fs) * 1000.0
+    
+    # Canal Esquerdo (Parâmetros Originais)
+    left = apply_reverb(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain)
+    
+    # Canal Direito (Parâmetros com Spread nos Combs)
+    delays_right = [d + spread_ms for d in delays_combs]
+    
+    right = apply_reverb(x, fs, delays_right, gains_combs, delays_ap, gains_ap, wet_gain)
+    
+    # Junta em estéreo (N, 2)
+    stereo_output = np.column_stack((left, right))
+    
+    return stereo_output

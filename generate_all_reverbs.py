@@ -2,27 +2,10 @@ import os
 import numpy as np
 from file_manager import AudioManager
 from audio_io import save_wav
-from effects.reverb import apply_reverb
+from effects.reverb import apply_reverb, apply_reverb_stereo
 
 # Função auxiliar para estéreo (copiada do validate_effects.py)
-def apply_reverb_stereo(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain=0.4, spread=23):
-    """
-    Gera um Reverb Estéreo processando L e R com atrasos ligeiramente diferentes.
-    """
-    # 1. Calcula desvio em ms para o canal direito
-    spread_ms = (spread / fs) * 1000.0
-    
-    # Canal Esquerdo (Parâmetros Originais)
-    left = apply_reverb(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain)
-    
-    # Canal Direito (Parâmetros com Spread nos Combs)
-    delays_right = [d + spread_ms for d in delays_combs]
-    
-    right = apply_reverb(x, fs, delays_right, gains_combs, delays_ap, gains_ap, wet_gain)
-    
-    # Junta em estéreo (N, 2)
-    stereo_output = np.vstack((left, right)).T
-    return stereo_output
+
 
 def main():
     # 1. Configuração Inicial

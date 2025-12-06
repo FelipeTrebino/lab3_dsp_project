@@ -4,6 +4,7 @@ from effects.reverb import apply_reverb
 from effects.flanger import apply_flanger
 from effects.tremolo import apply_tremolo
 from pitch_shift.shift_assets import shift_to_note
+import numpy as np
 
 from audio_io import save_wav
 
@@ -12,12 +13,12 @@ def main():
     fs, audio_original = manager.get_dry_audio()
 
     # Comb Filters
-    combs_ms = [29.7, 37.1, 41.1, 43.7] # Delays (Tamanho da sala), em ms
-    combs_gains = [0.77, 0.75, 0.73, 0.71] # Ganhos 
+    combs_ms = [36.43, 56.21, 44.86, 25.17] # Delays (Tamanho da sala), em ms
+    combs_gains = [0.863, 0.807, 0.879, 0.906] # Ganhos 
     
     # All-Pass (Difusão)
-    aps_ms = [5.0, 1.7] # Delays em ms
-    aps_gains = [0.7, 0.7] # Ganhos
+    aps_ms = [2.6, 1.22] # Delays em ms
+    aps_gains = [0.722, 0.638] # Ganhos
 
     print("Aplicando Reverb...")
     
@@ -28,10 +29,20 @@ def main():
         combs_gains, 
         aps_ms,
         aps_gains,
-        wet_gain=1
+        wet_gain=0.5
     )
     
-    processed_audio_flanger = apply_flanger(
+    processed_audio_reverb_stereo = apply_reverb_stereo(
+        audio_original, 
+        fs, 
+        combs_ms,    
+        combs_gains, 
+        aps_ms,
+        aps_gains,
+        wet_gain=0.5
+    )
+    
+    """"processed_audio_flanger = apply_flanger(
         audio_original, 
         fs
     )
@@ -43,12 +54,37 @@ def main():
     
     reverb_A4 = shift_to_note(processed_audio_reverb, fs, target_note="A4", root_note="C4")
     reverb_A3 = shift_to_note(processed_audio_reverb, fs, target_note="A3", root_note="C4")
+    """
+    #save_wav("output/reverb_test_A4.wav", fs, reverb_A4)
+    #save_wav("output/reverb_test_A3.wav", fs, reverb_A3)
+    save_wav("output/reverb_test.wav", fs, processed_audio_reverb)
+    save_wav("output/reverb_test_stereo.wav", fs, processed_audio_reverb_stereo)
+    #save_wav("output/flanger_test.wav", fs, processed_audio_flanger)
+    #save_wav("output/tremolo_test.wav", fs, processed_audio_tremolo)
+
+
+def apply_reverb_stereo(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain=0.4, spread=23):
+    """
+    Gera um Reverb Estéreo processando L e R com atrasos ligeiramente diferentes.
+    spread: valor em amostras adicionado ao canal direito para descorrelacionar.
+    """
     
-          
-    save_wav("output/reverb_test_A4.wav", fs, reverb_A4)
-    save_wav("output/reverb_test_A3.wav", fs, reverb_A3)
-    save_wav("output/flanger_test.wav", fs, processed_audio_flanger)
-    save_wav("output/tremolo_test.wav", fs, processed_audio_tremolo)
+    # 1. Calcula desvio em ms para o canal direito
+    spread_ms = (spread / fs) * 1000.0
+    
+    # Canal Esquerdo (Parâmetros Originais)
+    left = apply_reverb(x, fs, delays_combs, gains_combs, delays_ap, gains_ap, wet_gain, print_info=False)
+    
+    # Canal Direito (Parâmetros com Spread)
+    # Adiciona um pouquinho de atraso extra em cada Comb para "abrir" o som
+    delays_right = [d + spread_ms for d in delays_combs]
+    
+    # Opcional: Inverter levemente um ganho ou outro ajuda na largura
+    right = apply_reverb(x, fs, delays_right, gains_combs, delays_ap, gains_ap, wet_gain, print_info=False)
+    
+    # Junta em estéreo (N, 2)
+    stereo_output = np.vstack((left, right)).T
+    return stereo_output
 
 if __name__ == "__main__":
     main()

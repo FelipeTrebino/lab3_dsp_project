@@ -1,9 +1,10 @@
 import numpy as np
 from effects.assets import IIRCombFilter, AllPassFilter
 
-def apply_reverb(x, fs, delays_combs_ms, gains_combs, delays_ap_ms, gains_ap, wet_gain=0.4):
+def apply_reverb(x, fs, delays_combs_ms, gains_combs, delays_ap_ms, gains_ap, wet_gain=0.4, print_info=True):
     
-    print(f"--- Reverb: Processando {len(x)} amostras a {fs}Hz ---")
+    if print_info:
+        print(f"--- Reverb: Processando {len(x)} amostras a {fs}Hz ---")
     
     # 1. Inicializa Filtros (Recebendo MS direto)
     combs = []
@@ -16,6 +17,8 @@ def apply_reverb(x, fs, delays_combs_ms, gains_combs, delays_ap_ms, gains_ap, we
     
     N = len(x)
     y = np.zeros(N, dtype=np.float32)
+
+    comb_scale = 1.0 / len(combs) 
         
     # 2. Loop de Áudio
     for n in range(N):
@@ -25,19 +28,22 @@ def apply_reverb(x, fs, delays_combs_ms, gains_combs, delays_ap_ms, gains_ap, we
         for comb in combs:
             comb_sum += comb.process(input_sample)
             
+        ap_out = comb_sum * comb_scale
+            
         # Série de All-Pass
-        ap_out = comb_sum
         for ap in aps:
             ap_out = ap.process(ap_out)
             
         reverb_signal = ap_out
         
-        y[n] = (x[n] * (1 - wet_gain)) + (reverb_signal * wet_gain)/ len(combs)  # Normaliza pela quantidade de combs
+        #y[n] = (x[n] * (1 - wet_gain)) + (reverb_signal * wet_gain)
+        y[n] = input_sample + (reverb_signal * wet_gain)
             
     # 3. Normalização de Segurança (Evita o ruído digital se passar de 1.0)
     max_amp = np.max(np.abs(y))
     if max_amp > 1.0:
-        print(f" > Normalizando volume final (Pico: {max_amp:.2f})")
+        if print_info:
+            print(f" > Normalizando volume final (Pico: {max_amp:.2f})")
         y = y / max_amp
         
     return y
